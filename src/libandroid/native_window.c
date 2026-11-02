@@ -269,10 +269,20 @@ ANativeWindow *ANativeWindow_fromSurface(JNIEnv *env, jobject surface)
 
 	GtkWidget *surface_view_widget = gtk_widget_get_first_child(_PTR(_GET_LONG_FIELD(surface, "widget")));
 	GtkWidget *window = GTK_WIDGET(gtk_widget_get_native(surface_view_widget));
-	while ((width = gtk_widget_get_width(surface_view_widget)) == 0) {
-		// FIXME: UGLY: this loop waits until the SurfaceView widget gets mapped
-		if (g_thread_self() == main_thread_id)
-			g_main_context_iteration(g_main_context_default(), false);
+	width = gtk_widget_get_width(surface_view_widget);
+	if (width == 0) {
+		// Wait until the SurfaceView widget is mapped and has dimensions
+		guint64 start = g_get_monotonic_time();
+		while ((width = gtk_widget_get_width(surface_view_widget)) == 0) {
+			if (g_get_monotonic_time() - start > 5 * G_USEC_PER_SEC) {
+				fprintf(stderr, "native_window: timed out waiting for SurfaceView to be mapped\n");
+				break;
+			}
+			if (g_thread_self() == main_thread_id)
+				g_main_context_iteration(g_main_context_default(), false);
+			else
+				g_usleep(1000);
+		}
 	}
 	height = gtk_widget_get_height(surface_view_widget);
 
@@ -284,9 +294,7 @@ ANativeWindow *ANativeWindow_fromSurface(JNIEnv *env, jobject surface)
 	pos.x += off_x;
 	pos.y += off_y;
 
-	printf("XXXXX: SurfaceView widget: %p (%s), width: %d, height: %d\n", surface_view_widget, gtk_widget_get_name(surface_view_widget), width, height);
-	printf("XXXXX: SurfaceView widget: x: %lf, y: %lf\n", pos.x, pos.y);
-	printf("XXXXX: native offset: x: %lf, y: %lf\n", off_x, off_y);
+	// positioned and ready
 
 	struct ANativeWindow *native_window = calloc(1, sizeof(struct ANativeWindow));
 	native_window->refcount = 1; // probably, 0 doesn't work
@@ -302,11 +310,13 @@ ANativeWindow *ANativeWindow_fromSurface(JNIEnv *env, jobject surface)
 		struct wl_display *wl_display = gdk_wayland_display_get_wl_display(display);
 		struct wl_compositor *wl_compositor = gdk_wayland_display_get_wl_compositor(display);
 
-		if (!wl_subcompositor) { // FIXME this assumes the wl_display doesn't change
+		// Cache wl_subcompositor per display to handle display changes
+		static struct wl_display *cached_wl_display = NULL;
+		if (cached_wl_display != wl_display || !wl_subcompositor) {
 			struct wl_registry *wl_registry = wl_display_get_registry(wl_display);
 			wl_registry_add_listener(wl_registry, &wl_registry_listener, &wl_subcompositor);
 			wl_display_roundtrip(wl_display);
-			printf("XXX: wl_subcompositor: %p\n", wl_subcompositor);
+			cached_wl_display = wl_display;
 		}
 
 		struct wl_surface *toplevel_surface = gdk_wayland_surface_get_wl_surface(gtk_native_get_surface(GTK_NATIVE(window)));
@@ -342,7 +352,7 @@ ANativeWindow *ANativeWindow_fromSurface(JNIEnv *env, jobject surface)
 
 		/* Check if we support EGL */
 		if (gdk_x11_display_get_egl_version(display, &major, &minor)) {
-			printf("XXX: EGL version: %d.%d\n", major, minor);
+			// EGL initialized successfully
 		} else {
 			fprintf(stderr, "ANativeWindow_fromSurface: crashing here;\n"
 			                "The GTK X11 context was made using GLX, which isn't and won't be supported\n"

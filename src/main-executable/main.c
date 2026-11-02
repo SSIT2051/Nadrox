@@ -47,6 +47,14 @@ char *apk_path;
 gboolean app_exit(GtkWindow *self, JNIEnv *env) // TODO: do more cleanup?
 {
 	activity_close_all();
+	// Clear JNI exception state
+	if (env)
+		(*env)->ExceptionClear(env);
+	// Destroy the window
+	if (window) {
+		gtk_window_destroy(GTK_WINDOW(window));
+		window = NULL;
+	}
 	return false;
 }
 
