@@ -4,7 +4,7 @@
 
 #include <gtk/gtk.h>
 
-#include "src/api-impl-jni/defines.h"
+#include "defines.h"
 #include "util.h"
 
 const char *attribute_set_get_string(JNIEnv *env, jobject attrs, char *attribute, char *schema)

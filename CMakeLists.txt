@@ -1,272 +1,183 @@
-cmake_minimum_required(VERSION 3.16)
-project(android_translation_layer_unified)
+cmake_minimum_required(VERSION 3.20)
+project(android_translation_layer_unified VERSION 0.1.0 LANGUAGES C CXX Java)
 
-# Build configuration
-set(BUILD_DIR "${CMAKE_BINARY_DIR}")
-set(INSTALL_PREFIX "${BUILD_DIR}/install")
-set(BIN_DIR "${BUILD_DIR}/bin")
-set(LIB_DIR "${BUILD_DIR}/lib")
-set(INCLUDE_DIR "${BUILD_DIR}/include")
-set(PKGCONFIG_DIR "${LIB_DIR}/pkgconfig")
-set(THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/thirdparty")
+# =============================================================================
+# Global configuration
+# =============================================================================
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Number of parallel jobs
+# Unified install prefix
+set(UNIFIED_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install)
+set(UNIFIED_LIB_DIR ${UNIFIED_INSTALL_PREFIX}/lib)
+set(UNIFIED_BIN_DIR ${UNIFIED_INSTALL_PREFIX}/bin)
+set(UNIFIED_INCLUDE_DIR ${UNIFIED_INSTALL_PREFIX}/include)
+set(UNIFIED_PKGCONFIG_DIR ${UNIFIED_LIB_DIR}/pkgconfig)
+set(UNIFIED_JAVA_DIR ${UNIFIED_LIB_DIR}/java)
+
+# Parallel jobs
 include(ProcessorCount)
 ProcessorCount(NPROC)
 if(NPROC EQUAL 0)
     set(NPROC 4)
 endif()
 
-# Create output directories
-file(MAKE_DIRECTORY ${BIN_DIR})
-file(MAKE_DIRECTORY ${LIB_DIR})
-file(MAKE_DIRECTORY ${INCLUDE_DIR})
-file(MAKE_DIRECTORY ${PKGCONFIG_DIR})
-file(MAKE_DIRECTORY "${LIB_DIR}/art")
-file(MAKE_DIRECTORY "${LIB_DIR}/java")
-file(MAKE_DIRECTORY "${LIB_DIR}/java/dex/art")
-file(MAKE_DIRECTORY "${LIB_DIR}/java/dex/art/natives")
+# Java Configuration
+find_package(Java REQUIRED COMPONENTS Development)
+if(Java_JAVAC_EXECUTABLE)
+    set(JAVA_HOME_DIR ${JAVA_HOME})
+    message(STATUS "Using Java: ${JAVA_HOME_DIR}")
+else()
+    message(FATAL_ERROR "Java Development Kit not found")
+endif()
 
-message(STATUS "Build directory: ${BUILD_DIR}")
-message(STATUS "Install prefix: ${INSTALL_PREFIX}")
-message(STATUS "Binary directory: ${BIN_DIR}")
-message(STATUS "Library directory: ${LIB_DIR}")
+# dx tool from Android SDK
+find_program(DX_TOOL dx
+    PATHS /opt/android-sdk/build-tools/34.0.0 /opt/android-sdk/build-tools/33.0.0 /opt/android-sdk/build-tools/32.0.0
+    DOC "Android SDK dx tool"
+)
+if(NOT DX_TOOL)
+    message(WARNING "dx tool not found - DEX conversion will fail")
+endif()
+
+# Create output directories
+file(MAKE_DIRECTORY ${UNIFIED_BIN_DIR})
+file(MAKE_DIRECTORY ${UNIFIED_LIB_DIR})
+file(MAKE_DIRECTORY ${UNIFIED_INCLUDE_DIR})
+file(MAKE_DIRECTORY ${UNIFIED_PKGCONFIG_DIR})
+file(MAKE_DIRECTORY ${UNIFIED_JAVA_DIR}/dex/art)
+file(MAKE_DIRECTORY ${UNIFIED_JAVA_DIR}/dex/art/natives)
+file(MAKE_DIRECTORY ${UNIFIED_JAVA_DIR}/dex/android_translation_layer)
+file(MAKE_DIRECTORY ${UNIFIED_JAVA_DIR}/dex/android_translation_layer/natives)
+
+message(STATUS "Unified install prefix: ${UNIFIED_INSTALL_PREFIX}")
 message(STATUS "Parallel jobs: ${NPROC}")
 
 # =============================================================================
-# Step 1: Build wolfSSL
+# Build wolfSSL (uses upstream CMakeLists.txt)
 # =============================================================================
-set(WOLFSSL_DIR "${THIRDPARTY_DIR}/wolfssl")
-set(WOLFSSL_BUILD_DIR "${BUILD_DIR}/wolfssl_build")
+set(WOLFSSL_TLS13 ON CACHE BOOL "Enable TLS 1.3")
+set(WOLFSSL_DTLS ON CACHE BOOL "Enable DTLS")
+set(WOLFSSL_SRTP OFF CACHE BOOL "Disable DTLS-SRTP")
+set(WOLFSSL_OPENSSLEXTRA ON CACHE BOOL "Enable OpenSSL extra API")
+set(WOLFSSL_OPENSSLALL OFF CACHE BOOL "Disable OpenSSL all API")
+set(WOLFSSL_CURVE25519 ON CACHE BOOL "Enable Curve25519")
+set(WOLFSSL_ED25519 ON CACHE BOOL "Enable Ed25519")
+set(WOLFSSL_SHA512 ON CACHE BOOL "Enable SHA-512")
+set(WOLFSSL_SHA384 ON CACHE BOOL "Enable SHA-384")
+set(WOLFSSL_AESGCM ON CACHE BOOL "Enable AES-GCM")
+set(WOLFSSL_AESCBC ON CACHE BOOL "Enable AES-CBC")
+set(WOLFSSL_HKDF ON CACHE BOOL "Enable HKDF")
+set(WOLFSSL_RSA_PSS ON CACHE BOOL "Enable RSA-PSS")
+set(WOLFSSL_JNI ON CACHE BOOL "Enable JNI support")
+set(WOLFSSL_INSTALL ON CACHE BOOL "Create install targets")
+set(WOLFSSL_STATIC OFF CACHE BOOL "Build shared libraries")
+set(WOLFSSL_DEBUG OFF CACHE BOOL "Disable debug build")
+set(CMAKE_INSTALL_PREFIX ${UNIFIED_INSTALL_PREFIX} CACHE PATH "Install prefix" FORCE)
+set(CMAKE_INSTALL_LIBDIR lib CACHE PATH "Library directory" FORCE)
 
-add_custom_command(
-    OUTPUT ${WOLFSSL_BUILD_DIR}/.built
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${WOLFSSL_BUILD_DIR}
-    COMMAND ${CMAKE_COMMAND} -E chdir ${WOLFSSL_DIR} autoreconf -i
-    COMMAND ${CMAKE_COMMAND} -E chdir ${WOLFSSL_BUILD_DIR} ${WOLFSSL_DIR}/configure
-        --prefix=${INSTALL_PREFIX}
-        --libdir=${LIB_DIR}
-        --enable-shared
-        --disable-opensslall
-        --disable-opensslextra
-        --enable-aescbc-length-checks
-        --enable-curve25519
-        --enable-ed25519
-        --enable-ed25519-stream
-        --enable-oldtls
-        --enable-base64encode
-        --enable-tlsx
-        --enable-scrypt
-        --disable-examples
-        --enable-crl
-        --enable-jni
-        --enable-sessioncerts
-    COMMAND ${CMAKE_COMMAND} -E chdir ${WOLFSSL_BUILD_DIR} make -j${NPROC}
-    COMMAND ${CMAKE_COMMAND} -E chdir ${WOLFSSL_BUILD_DIR} make install
-    COMMAND ${CMAKE_COMMAND} -E touch ${WOLFSSL_BUILD_DIR}/.built
-    COMMENT "Building wolfSSL..."
-    VERBATIM
+add_subdirectory(thirdparty/wolfssl EXCLUDE_FROM_ALL)
+
+# Make wolfSSL targets available globally
+# wolfSSL's CMakeLists.txt already creates wolfssl::wolfssl alias
+# add_library(wolfssl::wolfcrypt ALIAS wolfcrypt)  # wolfcrypt is not a separate target
+
+# =============================================================================
+# Build bionic_translation
+# =============================================================================
+set(CMAKE_INSTALL_PREFIX ${UNIFIED_INSTALL_PREFIX} CACHE PATH "Install prefix" FORCE)
+set(CMAKE_INSTALL_LIBDIR lib CACHE PATH "Library directory" FORCE)
+
+add_subdirectory(thirdparty/bionic_translation EXCLUDE_FROM_ALL)
+
+# Make bionic targets available globally
+add_library(bionic::dl_bio ALIAS dl_bio)
+add_library(bionic::c_bio ALIAS c_bio)
+add_library(bionic::pthread_bio ALIAS pthread_bio)
+add_library(bionic::stdcpp_bio ALIAS stdc++_bio)
+
+# =============================================================================
+# Build art_standalone
+# =============================================================================
+set(CMAKE_INSTALL_PREFIX ${UNIFIED_INSTALL_PREFIX} CACHE PATH "Install prefix" FORCE)
+set(CMAKE_INSTALL_LIBDIR lib CACHE PATH "Library directory" FORCE)
+
+add_subdirectory(thirdparty/art_standalone EXCLUDE_FROM_ALL)
+
+# =============================================================================
+# Build android_translation_layer (main ATL project)
+# =============================================================================
+set(CMAKE_INSTALL_PREFIX ${UNIFIED_INSTALL_PREFIX} CACHE PATH "Install prefix" FORCE)
+set(CMAKE_INSTALL_LIBDIR lib CACHE PATH "Library directory" FORCE)
+
+# Pass unified directories to ATL build
+set(UNIFIED_LIB_DIR ${UNIFIED_LIB_DIR} CACHE INTERNAL "Unified lib dir")
+set(UNIFIED_JAVA_DIR ${UNIFIED_JAVA_DIR} CACHE INTERNAL "Unified java dir")
+
+add_subdirectory(${CMAKE_SOURCE_DIR}/atl EXCLUDE_FROM_ALL)
+
+# =============================================================================
+# Aggregate targets
+# =============================================================================
+add_custom_target(all_build ALL DEPENDS
+    wolfssl
+    wolfcrypt
+    dl_bio
+    c_bio
+    pthread_bio
+    stdc++_bio
+    art_standalone_all
+    libandroid
+    libtranslation_layer_main
+    android-translation-layer
+    api-impl.jar
+    gstub.jar
+    test_runner.jar
+    framework-res.apk
 )
-
-add_custom_target(wolfssl DEPENDS ${WOLFSSL_BUILD_DIR}/.built)
-
-# =============================================================================
-# Step 2: Build libunwind
-# =============================================================================
-set(LIBUNWIND_DIR "${THIRDPARTY_DIR}/libunwind")
-set(LIBUNWIND_BUILD_DIR "${BUILD_DIR}/libunwind_build")
-
-add_custom_command(
-    OUTPUT ${LIBUNWIND_BUILD_DIR}/.built
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${LIBUNWIND_BUILD_DIR}
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIBUNWIND_DIR} autoreconf -i
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIBUNWIND_BUILD_DIR} ${LIBUNWIND_DIR}/configure
-        --prefix=${INSTALL_PREFIX}
-        --libdir=${LIB_DIR}
-        --includedir=${INCLUDE_DIR}
-        --enable-shared
-        --disable-static
-        --disable-tests
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIBUNWIND_BUILD_DIR} make -j${NPROC}
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIBUNWIND_BUILD_DIR} make install
-    # Generate pkg-config file for libunwind
-    COMMAND ${CMAKE_COMMAND} -E echo "prefix=${INSTALL_PREFIX}" > ${PKGCONFIG_DIR}/libunwind.pc
-    COMMAND sh -c "echo 'libdir=${LIB_DIR}' >> ${PKGCONFIG_DIR}/libunwind.pc"
-    COMMAND sh -c "echo 'includedir=${INCLUDE_DIR}' >> ${PKGCONFIG_DIR}/libunwind.pc"
-    COMMAND ${CMAKE_COMMAND} -E echo "" >> ${PKGCONFIG_DIR}/libunwind.pc
-    COMMAND ${CMAKE_COMMAND} -E echo "Name: libunwind" >> ${PKGCONFIG_DIR}/libunwind.pc
-    COMMAND ${CMAKE_COMMAND} -E echo "Description: libunwind base library" >> ${PKGCONFIG_DIR}/libunwind.pc
-    COMMAND ${CMAKE_COMMAND} -E echo "Version: 1.8.3" >> ${PKGCONFIG_DIR}/libunwind.pc
-    COMMAND sh -c "echo 'Libs: -L\$${libdir} -lunwind' >> ${PKGCONFIG_DIR}/libunwind.pc"
-    COMMAND sh -c "echo 'Cflags: -I\$${includedir}' >> ${PKGCONFIG_DIR}/libunwind.pc"
-    COMMAND ${CMAKE_COMMAND} -E touch ${LIBUNWIND_BUILD_DIR}/.built
-    DEPENDS wolfssl
-    COMMENT "Building libunwind..."
-    VERBATIM
-)
-
-add_custom_target(libunwind DEPENDS ${LIBUNWIND_BUILD_DIR}/.built)
-
-# =============================================================================
-# Step 3: Build bionic_translation
-# =============================================================================
-set(BIONIC_DIR "${THIRDPARTY_DIR}/bionic_translation")
-set(BIONIC_BUILD_DIR "${BUILD_DIR}/bionic_build")
-
-add_custom_command(
-    OUTPUT ${BIONIC_BUILD_DIR}/.built
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${BIONIC_BUILD_DIR}
-    COMMAND ${CMAKE_COMMAND} -E env
-        PKG_CONFIG_PATH=/tmp/kilo/pkgconfig:${PKGCONFIG_DIR}:$ENV{PKG_CONFIG_PATH}
-        LD_LIBRARY_PATH=${LIB_DIR}:$ENV{LD_LIBRARY_PATH}
-        C_INCLUDE_PATH=${INCLUDE_DIR}:$ENV{C_INCLUDE_PATH}
-        CPLUS_INCLUDE_PATH=${INCLUDE_DIR}:$ENV{CPLUS_INCLUDE_PATH}
-        LIBRARY_PATH=${LIB_DIR}:$ENV{LIBRARY_PATH}
-        /home/ssit/.cache/uv/sdists-v10/pypi/numpy/1.26.4/nShalBSKYHmn8POb/src/vendored-meson/meson/meson.py setup ${BIONIC_BUILD_DIR} ${BIONIC_DIR}
-            --prefix=${INSTALL_PREFIX}
-            --libdir=lib
-            --buildtype=release
-            -Dpkg_config_path=${PKGCONFIG_DIR}
-    COMMAND ${CMAKE_COMMAND} -E env
-        PKG_CONFIG_PATH=/tmp/kilo/pkgconfig:${PKGCONFIG_DIR}:$ENV{PKG_CONFIG_PATH}
-        LD_LIBRARY_PATH=${LIB_DIR}:$ENV{LD_LIBRARY_PATH}
-        C_INCLUDE_PATH=${INCLUDE_DIR}:$ENV{C_INCLUDE_PATH}
-        CPLUS_INCLUDE_PATH=${INCLUDE_DIR}:$ENV{CPLUS_INCLUDE_PATH}
-        LIBRARY_PATH=${LIB_DIR}:$ENV{LIBRARY_PATH}
-        /home/ssit/.cache/uv/sdists-v10/pypi/numpy/1.26.4/nShalBSKYHmn8POb/src/vendored-meson/meson/meson.py compile -C ${BIONIC_BUILD_DIR} -j${NPROC}
-    # Copy libraries directly from the build directory (only .so files, not .p directories)
-    COMMAND ${CMAKE_COMMAND} -E copy ${BIONIC_BUILD_DIR}/libdl_bio.so.0.0.1 ${LIB_DIR}/
-    COMMAND ${CMAKE_COMMAND} -E copy ${BIONIC_BUILD_DIR}/libc_bio.so.0 ${LIB_DIR}/
-    COMMAND ${CMAKE_COMMAND} -E copy ${BIONIC_BUILD_DIR}/libpthread_bio.so.0 ${LIB_DIR}/
-    COMMAND ${CMAKE_COMMAND} -E copy ${BIONIC_BUILD_DIR}/libstdc++_bio.so.0 ${LIB_DIR}/
-    # Create symlinks
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIB_DIR} ${CMAKE_COMMAND} -E create_symlink libdl_bio.so.0.0.1 libdl_bio.so
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIB_DIR} ${CMAKE_COMMAND} -E create_symlink libc_bio.so.0 libc_bio.so
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIB_DIR} ${CMAKE_COMMAND} -E create_symlink libpthread_bio.so.0 libpthread_bio.so
-    COMMAND ${CMAKE_COMMAND} -E chdir ${LIB_DIR} ${CMAKE_COMMAND} -E create_symlink libstdc++_bio.so.0 libstdc++_bio.so
-    COMMAND ${CMAKE_COMMAND} -E touch ${BIONIC_BUILD_DIR}/.built
-    DEPENDS libunwind
-    COMMENT "Building bionic_translation..."
-    VERBATIM
-)
-
-add_custom_target(bionic_translation DEPENDS ${BIONIC_BUILD_DIR}/.built)
-
-# =============================================================================
-# Step 4: Build art_standalone
-# =============================================================================
-set(ART_DIR "${THIRDPARTY_DIR}/art_standalone")
-
-add_custom_command(
-    OUTPUT ${BUILD_DIR}/art_standalone/.built
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${BUILD_DIR}/art_standalone
-    # Copy binaries
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${ART_DIR}/out/host/linux-x86/bin/dx ${BIN_DIR}/
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${ART_DIR}/out/host/linux-x86/bin/dex2oat ${BIN_DIR}/
-    COMMAND sh -c "test -f ${ART_DIR}/out/host/linux-x86/bin/dalvikvm64 && cp ${ART_DIR}/out/host/linux-x86/bin/dalvikvm64 ${BIN_DIR}/ || true"
-    COMMAND sh -c "test -f ${ART_DIR}/out/host/linux-x86/bin/dalvikvm && cp ${ART_DIR}/out/host/linux-x86/bin/dalvikvm ${BIN_DIR}/ || true"
-    # Copy art libraries
-    COMMAND sh -c "cp -P ${ART_DIR}/out/host/linux-x86/lib64/*.so ${LIB_DIR}/art/ 2>/dev/null || true"
-    # Copy JNI libraries
-    COMMAND sh -c "cp -P ${ART_DIR}/out/host/linux-x86/lib64/libjavacore.so ${LIB_DIR}/java/dex/art/natives/ 2>/dev/null || true"
-    COMMAND sh -c "cp -P ${ART_DIR}/out/host/linux-x86/lib64/libnativehelper.so ${LIB_DIR}/java/dex/art/natives/ 2>/dev/null || true"
-    COMMAND sh -c "cp -P ${ART_DIR}/out/host/linux-x86/lib64/libopenjdk.so ${LIB_DIR}/java/dex/art/natives/ 2>/dev/null || true"
-    COMMAND sh -c "cp -P ${ART_DIR}/out/host/linux-x86/lib64/libopenjdkjvm.so ${LIB_DIR}/java/dex/art/natives/ 2>/dev/null || true"
-    COMMAND sh -c "cp -P ${ART_DIR}/out/host/linux-x86/lib64/libwolfssljni.so ${LIB_DIR}/java/dex/art/natives/ 2>/dev/null || true"
-    # Copy jar files
-    COMMAND sh -c "cp ${ART_DIR}/out/host/linux-x86/framework/*.jar ${LIB_DIR}/java/dex/art/ 2>/dev/null || true"
-    COMMAND sh -c "cp ${ART_DIR}/out/host/common/obj/JAVA_LIBRARIES/core-all-hostdex_intermediates/classes.jar ${LIB_DIR}/java/core-all_classes.jar 2>/dev/null || true"
-    COMMAND sh -c "cp ${ART_DIR}/out/host/common/obj/JAVA_LIBRARIES/core-junit-hostdex_intermediates/classes.jar ${LIB_DIR}/java/core-junit_classes.jar 2>/dev/null || true"
-    COMMAND sh -c "cp ${ART_DIR}/out/host/common/obj/JAVA_LIBRARIES/junit-runner-hostdex_intermediates/classes.jar ${LIB_DIR}/java/junit-runner_classes.jar 2>/dev/null || true"
-    # Copy dx.jar
-    COMMAND sh -c "cp ${ART_DIR}/out/host/linux-x86/framework/dx.jar ${LIB_DIR}/java/ 2>/dev/null || true"
-    # Copy headers
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${INCLUDE_DIR}/androidfw
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${ART_DIR}/libandroidfw/include/androidfw/androidfw_c_api.h
-        ${INCLUDE_DIR}/androidfw/
-    # Generate pkg-config file from template
-    COMMAND sed "s|@PREFIX@|${BUILD_DIR}|g" ${CMAKE_SOURCE_DIR}/cmake/art-standalone.pc.in > ${PKGCONFIG_DIR}/art-standalone.pc
-    COMMAND ${CMAKE_COMMAND} -E touch ${BUILD_DIR}/art_standalone/.built
-    DEPENDS bionic_translation
-    COMMENT "Building art_standalone..."
-    VERBATIM
-)
-
-add_custom_target(art_standalone DEPENDS ${BUILD_DIR}/art_standalone/.built)
-
-# =============================================================================
-# Step 5: Build android_translation_layer with meson
-# =============================================================================
-set(ATL_BUILD_DIR "${BUILD_DIR}/atl_build")
-
-add_custom_command(
-    OUTPUT ${ATL_BUILD_DIR}/.built
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${ATL_BUILD_DIR}
-    COMMAND ${CMAKE_COMMAND} -E env
-        JAVA_HOME=/usr/lib/jvm/java-17-openjdk
-        PKG_CONFIG_PATH=/tmp/kilo/pkgconfig:${PKGCONFIG_DIR}:$ENV{PKG_CONFIG_PATH}
-        LIBRARY_PATH=${LIB_DIR}:${LIB_DIR}/art:${BIONIC_BUILD_DIR}:$ENV{LIBRARY_PATH}
-        LD_LIBRARY_PATH=${LIB_DIR}:${LIB_DIR}/art:$ENV{LD_LIBRARY_PATH}
-        C_INCLUDE_PATH=${INCLUDE_DIR}:$ENV{C_INCLUDE_PATH}
-        PATH=/tmp/kilo/bin:${BIN_DIR}:/usr/lib/jvm/java-17-openjdk/bin:$ENV{PATH}
-        /home/ssit/.cache/uv/sdists-v10/pypi/numpy/1.26.4/nShalBSKYHmn8POb/src/vendored-meson/meson/meson.py setup ${ATL_BUILD_DIR} ${CMAKE_SOURCE_DIR}
-            --prefix=${INSTALL_PREFIX}
-            --libdir=lib
-            --buildtype=release
-            --wipe
-            -Dpkg_config_path=${PKGCONFIG_DIR}
-    COMMAND ${CMAKE_COMMAND} -E env
-        JAVA_HOME=/usr/lib/jvm/java-17-openjdk
-        PKG_CONFIG_PATH=/tmp/kilo/pkgconfig:${PKGCONFIG_DIR}:$ENV{PKG_CONFIG_PATH}
-        LIBRARY_PATH=${LIB_DIR}:${LIB_DIR}/art:${BIONIC_BUILD_DIR}:$ENV{LIBRARY_PATH}
-        LD_LIBRARY_PATH=${LIB_DIR}:${LIB_DIR}/art:$ENV{LD_LIBRARY_PATH}
-        C_INCLUDE_PATH=${INCLUDE_DIR}:$ENV{C_INCLUDE_PATH}
-        PATH=/tmp/kilo/bin:${BIN_DIR}:/usr/lib/jvm/java-17-openjdk/bin:$ENV{PATH}
-        /home/ssit/.cache/uv/sdists-v10/pypi/numpy/1.26.4/nShalBSKYHmn8POb/src/vendored-meson/meson/meson.py compile -C ${ATL_BUILD_DIR} -j${NPROC}
-    COMMAND ${CMAKE_COMMAND} -E touch ${ATL_BUILD_DIR}/.built
-    DEPENDS art_standalone
-    COMMENT "Building android_translation_layer..."
-    VERBATIM
-)
-
-add_custom_target(android_translation_layer DEPENDS ${ATL_BUILD_DIR}/.built)
-
-# =============================================================================
-# Default target
-# =============================================================================
-add_custom_target(all_build ALL DEPENDS android_translation_layer)
 
 # =============================================================================
 # Install target
 # =============================================================================
 add_custom_target(install_all
-    COMMAND ${CMAKE_COMMAND} -E env
-        PKG_CONFIG_PATH=/tmp/kilo/pkgconfig:${PKGCONFIG_DIR}:$ENV{PKG_CONFIG_PATH}
-        LD_LIBRARY_PATH=${LIB_DIR}:${LIB_DIR}/art:$ENV{LD_LIBRARY_PATH}
-        PATH=${BIN_DIR}:$ENV{PATH}
-        /home/ssit/.cache/uv/sdists-v10/pypi/numpy/1.26.4/nShalBSKYHmn8POb/src/vendored-meson/meson/meson.py install -C ${ATL_BUILD_DIR}
-    DEPENDS android_translation_layer
-    COMMENT "Installing android_translation_layer..."
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${UNIFIED_INSTALL_PREFIX}
+    DEPENDS all_build
+    COMMENT "Installing all components..."
 )
 
 # =============================================================================
 # Clean target
 # =============================================================================
 add_custom_target(clean_all
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${WOLFSSL_BUILD_DIR}
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${BIONIC_BUILD_DIR}
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${BUILD_DIR}/art_standalone
-    COMMAND ${CMAKE_COMMAND} -E remove_directory ${ATL_BUILD_DIR}
-    COMMAND ${CMAKE_COMMAND} -E chdir ${ART_DIR} make clean || true
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/thirdparty/wolfssl
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/thirdparty/bionic_translation
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/thirdparty/art_standalone
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/atl
     COMMENT "Cleaning all build directories..."
 )
 
+# =============================================================================
+# Package configuration
+# =============================================================================
+configure_file(
+    ${CMAKE_SOURCE_DIR}/thirdparty/art_standalone/art-standalone.pc.in
+    ${UNIFIED_PKGCONFIG_DIR}/art-standalone.pc
+    @ONLY
+)
+
+# =============================================================================
+# Summary
+# =============================================================================
 message(STATUS "")
-message(STATUS "=== Unified Build System Configuration ===")
-message(STATUS "To build everything: cmake --build build")
-message(STATUS "To install: cmake --build build --target install_all")
-message(STATUS "To clean: cmake --build build --target clean_all")
+message(STATUS "=== Unified CMake Build Configuration ===")
+message(STATUS "Components:")
+message(STATUS "  - wolfSSL (CMake native)")
+message(STATUS "  - bionic_translation (CMake native)")
+message(STATUS "  - art_standalone (wrapped Makefile)")
+message(STATUS "  - android_translation_layer (CMake native)")
+message(STATUS "")
+message(STATUS "Build: cmake --build build")
+message(STATUS "Install: cmake --build build --target install_all")
+message(STATUS "Clean: cmake --build build --target clean_all")
 message(STATUS "")

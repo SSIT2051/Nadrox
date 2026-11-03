@@ -408,23 +408,27 @@ ANativeWindow *ANativeWindow_fromSurfaceTexture(JNIEnv *env, jobject surfaceText
 
 // FIXME 1.5: this most likely belongs elsewhere
 
-VkResult bionic_vkCreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
+VkResult bionic_vkCreateAndroidSurfaceKHR(VkInstance instance, const struct VkAndroidSurfaceCreateInfoKHR *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface)
 {
 	GdkDisplay *display = gtk_widget_get_display(pCreateInfo->window->surface_view_widget);
 
 	if (GDK_IS_WAYLAND_DISPLAY(display)) {
-		VkWaylandSurfaceCreateInfoKHR wayland_create_info = {
+		struct VkWaylandSurfaceCreateInfoKHR wayland_create_info = {
 			.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+			.pNext = NULL,
+			.flags = 0,
 			.display = pCreateInfo->window->wayland_display,
 			.surface = pCreateInfo->window->wayland_surface,
 		};
 
 		return vkCreateWaylandSurfaceKHR(instance, &wayland_create_info, pAllocator, pSurface);
 	} else if (GDK_IS_X11_DISPLAY(display)) {
-		VkXlibSurfaceCreateInfoKHR x11_create_info = {
+		struct VkXlibSurfaceCreateInfoKHR x11_create_info = {
 			.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+			.pNext = NULL,
+			.flags = 0,
 			.dpy = pCreateInfo->window->x11_display,
-			.window = pCreateInfo->window->egl_window,
+			.window = (unsigned long)pCreateInfo->window->egl_window,
 		};
 
 		return vkCreateXlibSurfaceKHR(instance, &x11_create_info, pAllocator, pSurface);
@@ -434,7 +438,7 @@ VkResult bionic_vkCreateAndroidSurfaceKHR(VkInstance instance, const VkAndroidSu
 	}
 }
 
-VkResult bionic_vkCreateInstance(VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
+VkResult bionic_vkCreateInstance(struct VkInstanceCreateInfo *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
 {
 	int original_extension_count = pCreateInfo->enabledExtensionCount;
 	int new_extension_count = original_extension_count + 2;

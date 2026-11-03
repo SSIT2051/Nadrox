@@ -85,6 +85,27 @@ No autotools, no Meson, no Make - pure CMake.
 
 ---
 
+<div style="background: #1e1e1e; border-left: 4px solid #0066ff; padding: 1.5rem; margin: 2rem 0; border-radius: 0 8px 8px 0;">
+<h2 style="color: #00ffff; margin-top: 0; font-family: 'DejaVu Sans', sans-serif; font-weight: bold;">⚡ Current Limitations (Tech Innovation Theme)</h2>
+<ul style="color: #ffffff; font-family: 'DejaVu Sans', sans-serif; line-height: 1.8;">
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>Not a true unified build</strong> - just shell command wrappers</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>ExternalProject_Add with hardcoded commands</strong> - fragile and non-portable</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>Fragile dependency on system tools</strong> (autoconf, meson, ninja)</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>No proper CMake target exports</strong> between components</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>Rebuilds don't always detect changes correctly</strong></li>
+</ul>
+
+<h3 style="color: #00ffff; font-family: 'DejaVu Sans', sans-serif;">✅ What Works</h3>
+<ul style="color: #ffffff; font-family: 'DejaVu Sans', sans-serif; line-height: 1.8;">
+<li style="margin: 0.5rem 0;"><span style="color: #00ff00;">✓</span> Single command initiates build: <code style="color: #00ffff;">cmake -B build && cmake --build build</code></li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ff00;">✓</span> Dependencies bundled in <code style="color: #00ffff;">thirdparty/</code></li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ff00;">✓</span> Build order enforced: wolfSSL → libunwind → bionic_translation → art_standalone → ATL</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ff00;">✓</span> pkg-config files generated for dependency resolution</li>
+</ul>
+</div>
+
+---
+
 ## Phase 3: Simplified Runtime
 
 ### Goals
@@ -258,15 +279,17 @@ Expand platform compatibility beyond x86_64 Linux.
 
 ---
 
-## Known Limitations
-
-Current limitations that need addressing:
-
-1. **SDK Version** - Many apps require SDK 21+ but detection is manual
-2. **Google Play Services** - Not implemented, breaks many apps
-3. **Native ARM libraries** - No ARM emulation, x86 only
-4. **Fragments** - Basic support, complex navigation may fail
-5. **WebView** - WebKitGTK works but some features missing
+<div style="background: #1e1e1e; border-left: 4px solid #0066ff; padding: 1.5rem; margin: 2rem 0; border-radius: 0 8px 8px 0;">
+<h2 style="color: #00ffff; margin-top: 0; font-family: 'DejaVu Sans', sans-serif; font-weight: bold;">⚡ Known Limitations (Tech Innovation Theme)</h2>
+<p style="color: #ffffff; font-family: 'DejaVu Sans', sans-serif;">Current limitations that need addressing:</p>
+<ul style="color: #ffffff; font-family: 'DejaVu Sans', sans-serif; line-height: 1.8;">
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>SDK Version</strong> - Many apps require SDK 21+ but detection is manual</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>Google Play Services</strong> - Not implemented, breaks many apps</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>Native ARM libraries</strong> - No ARM emulation, x86 only</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>Fragments</strong> - Basic support, complex navigation may fail</li>
+<li style="margin: 0.5rem 0;"><span style="color: #00ffff;">▸</span> <strong>WebView</strong> - WebKitGTK works but some features missing</li>
+</ul>
+</div>
 
 ---
 

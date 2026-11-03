@@ -3,7 +3,7 @@ project('android_translation_layer', ['c', 'java'], default_options: ['b_lundef=
 gnome = import('gnome')
 fs = import('fs')
 
-incdir_dep = declare_dependency(include_directories: '.')
+incdir_dep = declare_dependency(include_directories: ['.', '/tmp/kilo/lp_extracted/usr/include', '/tmp/kilo/vk_extracted/usr/include', '/tmp/kilo/wk_extracted/usr/include/webkitgtk-6.0'])
 add_project_dependencies(incdir_dep, language: 'c')
 
 cc = meson.get_compiler('c')
@@ -73,6 +73,7 @@ libandroid_so = shared_library('android', [
                                           c_args: [
                                           	'-D_LARGEFILE64_SOURCE',
                                           ],
+                                          include_directories: include_directories('build/include', '/tmp/kilo/vk_extracted/usr/include'),
                                           link_args : [
                                           	'-Wl,-z,lazy',  # outdated Nvidia driver version 340 lacks EGL symbols
                                           ])
