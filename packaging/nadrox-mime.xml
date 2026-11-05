@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.android.package-archive">
+    <comment>Android Package</comment>
+    <comment xml:lang="de">Android-Paket</comment>
+    <comment xml:lang="fr">Paquet Android</comment>
+    <comment xml:lang="es">Paquete Android</comment>
+    <glob pattern="*.apk"/>
+    <icon name="nadrox-apk"/>
+  </mime-type>
+</mime-info>

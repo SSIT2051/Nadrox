@@ -1,0 +1,14 @@
+[Trigger]
+Type = File
+Operation = Install
+Operation = Upgrade
+Target = usr/share/applications/nadrox.desktop
+Target = usr/share/mime/packages/nadrox.xml
+Target = usr/share/icons/hicolor/*/apps/nadrox.svg
+
+[Action]
+Description = Updating NADROX desktop database...
+When = PostTransaction
+Exec = /usr/bin/update-desktop-database -q
+Exec = /usr/bin/update-mime-database -q /usr/share/mime
+Exec = /usr/bin/gtk-update-icon-cache -q -f /usr/share/icons/hicolor

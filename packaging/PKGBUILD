@@ -1,0 +1,87 @@
+# Maintainer: NADROX Team
+pkgname=nadrox
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Android Translation Layer - Run ARM Android games on x86_64 Linux"
+arch=(x86_64)
+url="https://github.com/nadrox/nadrox"
+license=(MIT)
+depends=(
+  gtk4
+  vulkan-icd-loader
+  libx11
+  wayland
+  libportal
+  sqlite3
+  ffmpeg
+  openxr
+  gudev
+  libdrm
+  libxml2
+  fontconfig
+  webkit2gtk-6.0
+  alsa-lib
+  libunwind
+  libgl
+  mesa
+)
+makedepends=(
+  cmake
+  java-environment=21
+  git
+  python
+)
+optdepends=(
+  'vulkan-radeon: Vulkan driver for AMD GPUs'
+  'vulkan-intel: Vulkan driver for Intel GPUs'
+  'nvidia-utils: Vulkan driver for NVIDIA GPUs'
+  'vulkan-mesa-layers: Additional Vulkan layers'
+)
+provides=(nadrox)
+conflicts=(nadrox-git)
+source=("nadrox-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  
+  # Set Java 21
+  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+  export PATH="${JAVA_HOME}/bin:${PATH}"
+  
+  cmake -B build -S . \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_Java_COMPILER="${JAVA_HOME}/bin/javac" \
+    -DBUILD_FEX_EMU=OFF \
+    -DBUILD_BOX86_FROM_SOURCE=OFF
+  
+  cmake --build build -j$(nproc)
+}
+
+package() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  
+  DESTDIR="${pkgdir}" cmake --install build
+  
+  # Install desktop entry
+  install -Dm644 packaging/nadrox.desktop "${pkgdir}/usr/share/applications/nadrox.desktop"
+  
+  # Install MIME type
+  install -Dm644 packaging/nadrox-mime.xml "${pkgdir}/usr/share/mime/packages/nadrox.xml"
+  
+  # Install icons
+  for size in 16 32 48 64 128 256; do
+    install -Dm644 "packaging/icons/hicolor/${size}x${size}/apps/nadrox.svg" \
+      "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/nadrox.svg"
+  done
+  install -Dm644 packaging/icons/hicolor/scalable/apps/nadrox.svg \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/nadrox.svg"
+  
+  # APK-specific icon
+  install -Dm644 packaging/icons/hicolor/64x64/apps/nadrox.svg \
+    "${pkgdir}/usr/share/icons/hicolor/64x64/apps/nadrox-apk.svg"
+}
+
+# Post-install hooks handled by pacman hooks (see nadrox.hook)

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=NADROX Android Translation Layer
+GenericName=Android Game Runner
+Comment=Run ARM Android APKs on x86_64 Linux
+Exec=nadrox %f
+TryExec=nadrox
+Icon=nadrox
+Terminal=false
+Type=Application
+Categories=Game;Emulator;
+MimeType=application/vnd.android.package-archive;
+StartupNotify=true
+StartupWMClass=nadrox
+Keywords=android;apk;game;emulator;translation;
