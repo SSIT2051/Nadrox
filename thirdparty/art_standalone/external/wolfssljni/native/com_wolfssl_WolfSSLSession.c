@@ -24,7 +24,7 @@
 #include <sys/time.h>
 
 #include <arpa/inet.h>
-#include <wolfssl/options.h>
+#include "options.h"
 #include <wolfssl/ssl.h>
 #include <wolfssl/error-ssl.h>
 

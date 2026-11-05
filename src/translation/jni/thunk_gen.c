@@ -191,19 +191,17 @@ void *atl_jni_create_trampoline(void *translated_arm_func, const char *method_si
     if (!g_thunk_cache.initialized) {
         atl_thunk_gen_init();
     }
-    
-    if (!translated_arm_func) return NULL;
-    
+
     if (method_signature) {
         void *cached = find_cached_thunk(method_signature);
         if (cached) return cached;
     }
-    
+
     void *thunk = generate_trampoline(translated_arm_func, method_signature);
     if (thunk && method_signature) {
         cache_thunk(method_signature, thunk, MAX_THUNK_SIZE, translated_arm_func);
     }
-    
+
     return thunk;
 }
 

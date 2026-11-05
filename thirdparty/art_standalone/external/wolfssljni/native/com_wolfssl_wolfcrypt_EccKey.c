@@ -20,7 +20,7 @@
  */
 
 #include <stdint.h>
-#include <wolfssl/options.h>
+#include "options.h"
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>

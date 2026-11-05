@@ -78,6 +78,9 @@
 #include "linker_format.h"
 #include "linker_relocs.h"
 #include "linker_sleb128.h"
+#ifdef ATL_TRANSLATION_ENABLED
+#include "atl_arm_translate.h"
+#endif
 
 #define ALLOW_SYMBOLS_FROM_MAIN 1
 #define SO_MAX 128
@@ -164,6 +167,15 @@ static int apkenv_pid;
 
 /* This boolean is set if the program being loaded is setuid */
 static int apkenv_program_is_setuid;
+
+/* ATL ARM translation callback - set by the translation engine during init */
+static atl_translate_cb_t g_atl_translate_cb = NULL;
+
+/* Set the translation callback (called by atl_arm_translate_init) */
+void atl_linker_set_translate_cb(atl_translate_cb_t cb)
+{
+	g_atl_translate_cb = cb;
+}
 
 #if STATS
 struct _link_stats apkenv_linker_stats;
@@ -1244,6 +1256,13 @@ apkenv_load_segments(int fd, void *header, soinfo *si)
 				 */
 				si->ARM_exidx = (ElfW(Addr) *)phdr->p_vaddr;
 				si->ARM_exidx_count = phdr->p_memsz / 8;
+#ifdef ATL_TRANSLATION_ENABLED
+				if (si->flags & FLAG_ARM_LIBRARY || si->flags & FLAG_TRANSLATED) {
+					atl_arm_register_unwind_info((void *)si->ARM_exidx,
+					                              si->ARM_exidx_count,
+					                              si->base);
+				}
+#endif
 			}
 #endif
 		}
@@ -1374,6 +1393,17 @@ apkenv_load_library(const char *name, const bool try_glibc, int glibc_flag, void
 	TRACE("[ %5d - '%s' (%s) wants base=0x%016lx sz=0x%016lx ]\n", apkenv_pid, name,
 	      (req_base ? "prelinked" : "not pre-linked"), req_base, ext_sz);
 
+	/* Check if this is an ARM library that needs box86/box64 translation */
+	ElfW(Ehdr) *ehdr = (ElfW(Ehdr) *)bytes;
+	bool is_arm = false;
+	if (ehdr->e_machine == EM_ARM) {
+		is_arm = true;
+		TRACE("[ %5d - Detected 32-bit ARM library (e_machine=EM_ARM), will use box86 ]\n", apkenv_pid);
+	} else if (ehdr->e_machine == EM_AARCH64) {
+		is_arm = true;
+		TRACE("[ %5d - Detected 64-bit ARM library (e_machine=EM_AARCH64), will use box64 ]\n", apkenv_pid);
+	}
+
 	/* Now configure the soinfo struct where we'll store all of our data
 	 * for the ELF object. If the loading fails, we waste the entry, but
 	 * same thing would happen if we failed during linking. Configuring the
@@ -1393,6 +1423,32 @@ apkenv_load_library(const char *name, const bool try_glibc, int glibc_flag, void
 	si->base = req_base;
 	si->size = ext_sz;
 	si->flags = 0;
+
+	/* Mark ARM libraries for translation now that si is allocated
+	 * and flags have been zeroed. */
+	if (is_arm) {
+		si->flags |= FLAG_ARM_LIBRARY;
+		TRACE("[ %5d - Marked ARM library for translation (FLAG_ARM_LIBRARY) ]\n", apkenv_pid);
+
+		/* Hook: invoke the ARM translation engine if a callback is registered */
+		if (g_atl_translate_cb) {
+			uintptr_t translated_base = 0;
+			size_t translated_size = 0;
+			void *translated_handle = g_atl_translate_cb(si->fullpath, si->base,
+			                                              &translated_base, &translated_size);
+			if (translated_handle) {
+				si->flags |= FLAG_TRANSLATED;
+				si->translated_base = translated_base;
+				si->translated_size = translated_size;
+				si->translated_handle = translated_handle;
+				TRACE("[ %5d - ARM library translated: base=0x%016lx size=0x%016lx ]\n",
+				      apkenv_pid, translated_base, translated_size);
+			} else {
+				TRACE("[ %5d - ARM library translation failed, falling back ]\n", apkenv_pid);
+			}
+		}
+	}
+
 	si->entry = 0;
 	si->dynamic = (ElfW(Dyn) *)-1;
 	if (apkenv_alloc_mem_region(si) < 0)
@@ -2872,3 +2928,15 @@ void dl_parse_library_path(const char *path, char *delim)
 		apkenv_ldpaths[i] = NULL;
 	}
 }
+
+/* Force definition of section start/stop symbols for symbol_not_linked_stub_section */
+asm(".pushsection symbol_not_linked_stub_section,\"a\",@progbits\n"
+    ".global __start_symbol_not_linked_stub_section\n"
+    ".type __start_symbol_not_linked_stub_section, %object\n"
+    "__start_symbol_not_linked_stub_section:\n"
+    ".quad 0\n"
+    ".global __stop_symbol_not_linked_stub_section\n"
+    ".type __stop_symbol_not_linked_stub_section, %object\n"
+    "__stop_symbol_not_linked_stub_section:\n"
+    ".quad 0\n"
+    ".popsection\n");

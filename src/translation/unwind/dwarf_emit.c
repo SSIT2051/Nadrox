@@ -306,3 +306,24 @@ size_t dwarf_emit_eh_frame(struct ehabi_entry *entries, size_t entry_count,
     
     return pos;
 }
+
+
+/* Skeleton entry point: translate ARM EHABI (.ARM.exidx-style entries) into
+ * x86_64 DWARF CFI bytes (.eh_frame/FDE stream) via existing converters. */
+size_t atl_dwarf_translate_arm_ehabi_to_x86_cfi(const uint8_t *arm_exidx,
+                                                size_t exidx_count,
+                                                uint64_t text_base,
+                                                uint8_t *out_buf,
+                                                size_t out_buf_size)
+{
+    if (!arm_exidx || !out_buf || exidx_count == 0 || out_buf_size == 0)
+        return 0;
+    struct ehabi_entry *entries = (struct ehabi_entry *)calloc(exidx_count,
+                                                               sizeof(*entries));
+    if (!entries) return 0;
+    /* arm_exidx is expected as an array of 8-byte exidx entries. */
+    (void)ehabi_parse_exidx((uint32_t *)(uintptr_t)arm_exidx, exidx_count, entries);
+    size_t n = dwarf_emit_eh_frame(entries, exidx_count, out_buf, out_buf_size, text_base);
+    free(entries);
+    return n;
+}

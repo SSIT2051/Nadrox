@@ -21,6 +21,7 @@ add_library(atl_translation STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/unwind/ehabi_decode.c
     ${CMAKE_CURRENT_SOURCE_DIR}/unwind/dwarf_emit.c
     ${CMAKE_CURRENT_SOURCE_DIR}/unwind/personality.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/elf/elf_config.c
     ${CMAKE_CURRENT_SOURCE_DIR}/elf/elf_loader.c
     ${CMAKE_CURRENT_SOURCE_DIR}/elf/elf_reloc.c
     ${CMAKE_CURRENT_SOURCE_DIR}/elf/elf_dynlink.c

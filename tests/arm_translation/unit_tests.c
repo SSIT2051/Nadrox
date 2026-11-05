@@ -312,7 +312,7 @@ void test_arm_decode_conditions() {
     printf("\n=== ARM Condition Codes Tests ===\n");
     
     for (int c = 0; c < 16; c++) {
-        uint32_t inst = (c << 28) | 0xE3A00000; /* MOV r0, #0 with condition */
+        uint32_t inst = (c << 28) | 0x03A00000; /* MOV r0, #0 with condition */
         atl_arm_decoded_inst_t d = {0};
         bool ok = atl_arm_decode_a32(inst, &d);
         TEST_ASSERT_FMT(ok, "Condition %d decode", c);

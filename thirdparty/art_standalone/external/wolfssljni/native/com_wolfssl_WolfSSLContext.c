@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include <wolfssl/options.h>
+#include "options.h"
 #include <wolfssl/ssl.h>
 #include <wolfssl/wolfcrypt/asn.h>
 #include <wolfssl/error-ssl.h>
@@ -366,10 +366,12 @@ JNIEXPORT void JNICALL Java_com_wolfssl_WolfSSLContext_freeContext
     }
 
     /* release global CRL callback object if set */
+#ifdef HAVE_CRL
     if (g_crlCtxCbIfaceObj != NULL) {
         (*jenv)->DeleteGlobalRef(jenv, g_crlCtxCbIfaceObj);
         g_crlCtxCbIfaceObj = NULL;
     }
+#endif
 
     /* wolfSSL checks for null pointer */
     wolfSSL_CTX_free(ctx);

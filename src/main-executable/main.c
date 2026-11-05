@@ -22,6 +22,10 @@
 #include <stdio.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 
 #ifndef DEFFILEMODE
 	#define DEFFILEMODE (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) /* 0666*/
@@ -39,23 +43,99 @@
 	#error unknown native architecture
 #endif
 
+// Forward declarations
+extern void cleanup_extracted_natives(void);
+extern void cleanup_handle_cache(JNIEnv *env);
+extern void cleanup_input_queues(void);
+extern char *app_data_dir;
+
+// Global state for cleanup
+static GThread *main_thread_id = NULL;
+static GList *extracted_libs = NULL;
+static GHashTable *global_refs_table = NULL;
+
 GtkWidget *window;
 char *apk_path;
 
 // standard Gtk Application stuff, more or less
 
-gboolean app_exit(GtkWindow *self, JNIEnv *env) // TODO: do more cleanup?
+gboolean app_exit(GtkWindow *self, JNIEnv *env)
 {
-	activity_close_all();
-	// Clear JNI exception state
-	if (env)
-		(*env)->ExceptionClear(env);
-	// Destroy the window
-	if (window) {
-		gtk_window_destroy(GTK_WINDOW(window));
-		window = NULL;
-	}
-	return false;
+    fprintf(stderr, "app_exit: cleaning up...\n");
+    
+    // 1. Close all activities and clean up Android state
+    activity_close_all();
+    
+    // 2. Clear JNI exception state
+    if (env)
+        (*env)->ExceptionClear(env);
+    
+    // 3. Delete all global JNI references
+    cleanup_handle_cache(env);
+    
+    // 4. Clean up extracted native libraries (dlclose)
+    cleanup_extracted_natives();
+    
+    // 5. Clean up input queues
+    cleanup_input_queues();
+    
+    // 6. Destroy the window
+    if (window) {
+        gtk_window_destroy(GTK_WINDOW(window));
+        window = NULL;
+    }
+    
+    // 7. Free app_data_dir
+    if (app_data_dir) {
+        free(app_data_dir);
+        app_data_dir = NULL;
+    }
+    
+    // 8. Free apk_path
+    if (apk_path) {
+        free(apk_path);
+        apk_path = NULL;
+    }
+    
+    // 9. Reset global state
+    main_thread_id = NULL;
+    
+    fprintf(stderr, "app_exit: cleanup complete\n");
+    return false;
+}
+
+// Cleanup extracted native libraries
+void cleanup_extracted_natives(void)
+{
+    if (extracted_libs) {
+        for (GList *l = extracted_libs; l; l = l->next) {
+            void *handle = l->data;
+            if (handle) {
+                dlclose(handle);
+            }
+        }
+        g_list_free(extracted_libs);
+        extracted_libs = NULL;
+    }
+}
+
+// Cleanup handle cache - delete global JNI references
+void cleanup_handle_cache(JNIEnv *env)
+{
+    if (!env) return;
+    
+    // The handle_cache is defined in handle_cache.c
+    // We need to call its cleanup function
+    extern void handle_cache_cleanup(JNIEnv *env);
+    handle_cache_cleanup(env);
+}
+
+// Cleanup input queues
+void cleanup_input_queues(void)
+{
+    // Input queues are managed in input.c
+    extern void input_queue_cleanup_all(void);
+    input_queue_cleanup_all();
 }
 
 // this is the equivalent of /data/data/com.example.app/
@@ -84,6 +164,99 @@ char *construct_classpath(char *prefix, char **cp_array, size_t len)
 	}
 
 	return result;
+}
+
+// Parse AndroidManifest.xml for minSdkVersion and targetSdkVersion
+// Returns SDK version string or NULL if not found (defaults to "28" for Android 9)
+char *parse_android_manifest_sdk(const char *apk_path)
+{
+    // Use aapt2 to properly decode binary AXML and extract SDK version info
+    char cmd[PATH_MAX + 100];
+    snprintf(cmd, sizeof(cmd), "aapt2 dump xmltree '%s' AndroidManifest.xml 2>/dev/null", apk_path);
+    
+    FILE *fp = popen(cmd, "r");
+    if (!fp) {
+        // Fall back to unzip + naive string search if aapt2 not available
+        snprintf(cmd, sizeof(cmd), "unzip -p '%s' AndroidManifest.xml 2>/dev/null", apk_path);
+        fp = popen(cmd, "r");
+        if (!fp) {
+            return NULL;
+        }
+    }
+    
+    char *manifest_text = NULL;
+    size_t total_read = 0;
+    char buffer[4096];
+    
+    while (!feof(fp)) {
+        size_t read = fread(buffer, 1, sizeof(buffer), fp);
+        if (read > 0) {
+            char *new_text = realloc(manifest_text, total_read + read + 1);
+            if (!new_text) {
+                free(manifest_text);
+                pclose(fp);
+                return NULL;
+            }
+            manifest_text = new_text;
+            memcpy(manifest_text + total_read, buffer, read);
+            total_read += read;
+        }
+    }
+    pclose(fp);
+    
+    if (!manifest_text || total_read == 0) {
+        free(manifest_text);
+        return NULL;
+    }
+    manifest_text[total_read] = '\0';
+    
+    // Parse the (possibly decoded) XML for minSdkVersion and targetSdkVersion
+    char *min_sdk = NULL;
+    char *target_sdk = NULL;
+    
+    // Search for minSdkVersion
+    char *ptr = strstr(manifest_text, "minSdkVersion");
+    if (ptr) {
+        // Look for the value after the attribute name
+        // aapt2 output format: android:minSdkVersion="28" or minSdkVersion="28"
+        char *eq = strchr(ptr, '=');
+        if (eq) {
+            eq++;
+            while (*eq == '"' || *eq == '\'' || *eq == ' ') eq++;
+            char *end = eq;
+            while (*end >= '0' && *end <= '9') end++;
+            if (end > eq) {
+                min_sdk = strndup(eq, end - eq);
+            }
+        }
+    }
+    
+    // Search for targetSdkVersion
+    ptr = strstr(manifest_text, "targetSdkVersion");
+    if (ptr) {
+        char *eq = strchr(ptr, '=');
+        if (eq) {
+            eq++;
+            while (*eq == '"' || *eq == '\'' || *eq == ' ') eq++;
+            char *end = eq;
+            while (*end >= '0' && *end <= '9') end++;
+            if (end > eq) {
+                target_sdk = strndup(eq, end - eq);
+            }
+        }
+    }
+    
+    free(manifest_text);
+    
+    // Prefer targetSdkVersion, fallback to minSdkVersion
+    if (target_sdk) {
+        return target_sdk;
+    }
+    if (min_sdk) {
+        return min_sdk;
+    }
+    
+    return NULL;
 }
 
 #define JDWP_ARG    "-XjdwpOptions:transport=dt_socket,server=y,suspend=y,address="
@@ -309,7 +482,7 @@ char *find_jar_or_die(char *builddir_path, char *installed_path, char *install_p
 	return path;
 }
 
-static void open(GtkApplication *app, GFile **files, gint nfiles, const gchar *hint, struct jni_callback_data *d)
+static void on_app_open(GtkApplication *app, GFile **files, gint nfiles, const gchar *hint, struct jni_callback_data *d)
 {
 	// TODO: pass all files to classpath
 	/*
@@ -398,14 +571,28 @@ static void open(GtkApplication *app, GFile **files, gint nfiles, const gchar *h
 		fprintf(stderr, "can't create app data dir %s (%s)\n", app_data_dir, strerror(errno));
 		exit(1);
 	}
+// check for jars and apks  in './' (if running from builddir), or in system install path
+ 	api_impl_jar = find_jar_or_die(API_IMPL_JAR_PATH_LOCAL, REL_API_IMPL_JAR_INSTALL_PATH, dex_install_dir);
 
-	// check for jars and apks  in './' (if running from builddir), or in system install path
-	api_impl_jar = find_jar_or_die(API_IMPL_JAR_PATH_LOCAL, REL_API_IMPL_JAR_INSTALL_PATH, dex_install_dir);
-	framework_res_apk = find_jar_or_die(FRAMEWORK_RES_PATH_LOCAL, REL_FRAMEWORK_RES_INSTALL_PATH, dex_install_dir);
-	if (d->apk_instrumentation_class)
-		test_runner_jar = find_jar_or_die(TEST_RUNNER_JAR_PATH_LOCAL, REL_TEST_RUNNER_JAR_INSTALL_PATH, dex_install_dir);
+ 	framework_res_apk = find_jar_or_die(FRAMEWORK_RES_PATH_LOCAL, REL_FRAMEWORK_RES_INSTALL_PATH, dex_install_dir);
+ 	if (d->apk_instrumentation_class)
+ 		test_runner_jar = find_jar_or_die(TEST_RUNNER_JAR_PATH_LOCAL, REL_TEST_RUNNER_JAR_INSTALL_PATH, dex_install_dir);
 
-	char *api_impl_natives_dir = g_strdup_printf("%s/%s", dex_install_dir, REL_API_IMPL_NATIVES_INSTALL_PATH);
+ 	// Auto-detect SDK version from AndroidManifest.xml if not provided
+ 	char *auto_sdk_int = NULL;
+ 	if (!d->sdk_int) {
+ 		auto_sdk_int = parse_android_manifest_sdk(apk_classpath);
+ 		if (auto_sdk_int) {
+ 			fprintf(stderr, "Auto-detected SDK version: %s\n", auto_sdk_int);
+ 		} else {
+ 			// Default to SDK 28 (Android 9) if not found
+ 			auto_sdk_int = strdup("28");
+ 			fprintf(stderr, "Could not detect SDK version, defaulting to: %s\n", auto_sdk_int);
+ 		}
+ 		d->sdk_int = auto_sdk_int;
+ 	}
+
+ 	char *api_impl_natives_dir = g_strdup_printf("%s/%s", dex_install_dir, REL_API_IMPL_NATIVES_INSTALL_PATH);
 
 	char *app_lib_dir = malloc(strlen(app_data_dir) + strlen("/lib") + 1); // +1 for NULL
 	strcpy(app_lib_dir, app_data_dir);
@@ -833,7 +1020,7 @@ int main(int argc, char **argv)
 	g_application_set_option_context_summary(G_APPLICATION(app), "a translation layer for running android applications natively on Linux");
 
 	g_signal_connect(app, "activate", G_CALLBACK(activate), callback_data);
-	g_signal_connect(app, "open", G_CALLBACK(open), callback_data);
+	g_signal_connect(app, "open", G_CALLBACK(on_app_open), callback_data);
 	g_action_map_add_action_entries(G_ACTION_MAP(app), action_entries, action_entries_count, NULL);
 	status = g_application_run(G_APPLICATION(app), argc, argv);
 	remove_ongoing_notifications();

@@ -144,6 +144,8 @@ typedef struct soinfo soinfo;
 #define FLAG_EXE	0x00000004 // The main executable
 #define FLAG_LINKER	0x00000010 // The linker itself
 #define FLAG_GNU_HASH   0x00000040 // uses gnu hash
+#define FLAG_ARM_LIBRARY 0x00000080 // ARM library requiring translation
+#define FLAG_TRANSLATED 0x00000100 // Library has been translated to x86_64
 
 #define SOINFO_NAME_LEN 512
 
@@ -240,6 +242,11 @@ struct soinfo {
 	/* apkenv stuff */
 	char fullpath[SOINFO_NAME_LEN];
 	size_t tls_slot_id;
+
+	/* ATL ARM translation fields */
+	uintptr_t translated_base;   /* x86_64 translated base address */
+	size_t   translated_size;    /* x86_64 translated code size */
+	void    *translated_handle;  /* Opaque translation handle */
 };
 
 extern soinfo apkenv_libdl_info;
@@ -288,5 +295,11 @@ void apkenv_notify_gdb_of_libraries(void);
 int apkenv_add_sopath(const char *path);
 
 bool do_we_have_this_handle(void *handle);
+
+/* ATL ARM translation callback */
+typedef void *(*atl_translate_cb_t)(const char *library_path, uintptr_t preferred_base,
+                                     uintptr_t *translated_base, size_t *translated_size);
+
+void atl_linker_set_translate_cb(atl_translate_cb_t cb);
 
 #endif

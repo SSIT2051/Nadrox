@@ -6,7 +6,7 @@
 #include "../generated_headers/android_view_View.h"
 
 #include "WrapperWidget.h"
-#include "src/api-impl-jni/views/AndroidLayout.h"
+#include "../views/AndroidLayout.h"
 
 G_DEFINE_TYPE(WrapperWidget, wrapper_widget, GTK_TYPE_WIDGET)
 

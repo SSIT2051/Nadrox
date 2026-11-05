@@ -124,6 +124,7 @@ set_target_properties(dl_bio PROPERTIES
 target_link_options(dl_bio PRIVATE
     -Wl,--no-as-needed
     -lpthread
+    -Wl,--gc-sections
 )
 
 # =============================================================================

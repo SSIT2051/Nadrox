@@ -170,3 +170,12 @@ void atl_arm_set_cleanup_handler(void (*handler)(void *))
 {
     g_cleanup_handler = handler;
 }
+
+
+/* ELF/JIT registration skeleton: exposes personality registration to the ELF
+ * JIT path. Full registration requires .eh_frame emission/registration with
+ * the unwinder; this hook provides the integration point. */
+void atl_elf_jit_register_eh_personality(void)
+{
+    atl_arm_register_personality();
+}

@@ -1118,8 +1118,14 @@ atl_mir_value_t *atl_mir_builder_##name(atl_mir_builder_t *b, atl_mir_value_t *a
 BUILD_VECTOR(vadd, VADD)
 BUILD_VECTOR(vsub, VSUB)
 BUILD_VECTOR(vmul, VMUL)
-BUILD_VECTOR(vdot, VDOT)
 BUILD_VECTOR(vcross, VCROSS)
+
+atl_mir_value_t *atl_mir_builder_vdot(atl_mir_builder_t *b, atl_mir_value_t *a, atl_mir_value_t *b_val)
+{
+    if (!b || !b->cur_block || !a || !b_val) return NULL;
+    atl_mir_value_t *ops[] = { a, b_val };
+    return atl_mir_builder_inst(b, ATL_MIR_OP_VDOT, atl_mir_type_float(32), 2, ops);
+}
 
 #undef BUILD_VECTOR
 

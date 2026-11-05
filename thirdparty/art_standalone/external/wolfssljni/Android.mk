@@ -45,7 +45,10 @@ LOCAL_SRC_FILES := \
     native/com_wolfssl_WolfSSLX509StoreCtx.c
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/native \
-    external/wolfssl
+    external/wolfssl \
+    external/wolfssl/wolfssl \
+    $(wildcard /home/ssit/Projects/Nadrox/build/thirdparty/wolfssl) \
+    $(wildcard /home/ssit/Projects/Nadrox/build/thirdparty/wolfssl/wolfssl)
 LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/native
 LOCAL_LDLIBS := -lwolfssl
 LOCAL_MODULE_TAGS := optional

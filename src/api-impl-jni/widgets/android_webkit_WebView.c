@@ -13,6 +13,8 @@
 #include "../generated_headers/android_view_View.h"
 #include "../generated_headers/android_webkit_WebView.h"
 
+JNIEXPORT jlong JNICALL Java_android_view_View_native_1constructor(JNIEnv *env, jobject this, jobject context, jobject attrs);
+
 static void asset_uri_scheme_request_cb(WebKitURISchemeRequest *request, gpointer user_data)
 {
 	const gchar *path = webkit_uri_scheme_request_get_path(request);

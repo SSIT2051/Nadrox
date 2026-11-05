@@ -167,7 +167,52 @@ void set_up_handle_cache(JNIEnv *env)
 
 	handle_cache.time_picker.class = _REF((*env)->FindClass(env, "android/widget/TimePicker"));
 	handle_cache.time_picker.onTimeChange = _METHOD(handle_cache.time_picker.class, "onTimeChange", "()V");
+}
 
-	handle_cache.date_picker.class = _REF((*env)->FindClass(env, "android/widget/DatePicker"));
-	handle_cache.date_picker.onDateChange = _METHOD(handle_cache.date_picker.class, "onDateChange", "()V");
+void handle_cache_cleanup(JNIEnv *env)
+{
+    if (!env) return;
+    
+    // Delete all global references stored in handle_cache
+    #define DELETE_GLOBAL_REF(ref) \
+        if (ref) { \
+            (*env)->DeleteGlobalRef(env, ref); \
+            ref = NULL; \
+        }
+    
+    DELETE_GLOBAL_REF(handle_cache.activity.class);
+    DELETE_GLOBAL_REF(handle_cache.attribute_set.class);
+    DELETE_GLOBAL_REF(handle_cache.array_list.class);
+    DELETE_GLOBAL_REF(handle_cache.paint.class);
+    DELETE_GLOBAL_REF(handle_cache.motion_event.class);
+    DELETE_GLOBAL_REF(handle_cache.sensor_event.class);
+    DELETE_GLOBAL_REF(handle_cache.audio_track_periodic_listener.class);
+    DELETE_GLOBAL_REF(handle_cache.input_queue_callback.class);
+    DELETE_GLOBAL_REF(handle_cache.surface_view.class);
+    DELETE_GLOBAL_REF(handle_cache.view.class);
+    DELETE_GLOBAL_REF(handle_cache.view_group.class);
+    DELETE_GLOBAL_REF(handle_cache.asset_manager.class);
+    DELETE_GLOBAL_REF(handle_cache.context.class);
+    DELETE_GLOBAL_REF(handle_cache.application.class);
+    DELETE_GLOBAL_REF(handle_cache.looper.class);
+    DELETE_GLOBAL_REF(handle_cache.key_event.class);
+    DELETE_GLOBAL_REF(handle_cache.drawable.class);
+    DELETE_GLOBAL_REF(handle_cache.intent.class);
+    DELETE_GLOBAL_REF(handle_cache.instrumentation.class);
+    DELETE_GLOBAL_REF(handle_cache.webview.class);
+    DELETE_GLOBAL_REF(handle_cache.canvas.class);
+    DELETE_GLOBAL_REF(handle_cache.uri.class);
+    DELETE_GLOBAL_REF(handle_cache.bundle.class);
+    DELETE_GLOBAL_REF(handle_cache.set.class);
+    DELETE_GLOBAL_REF(handle_cache.parcel.class);
+    DELETE_GLOBAL_REF(handle_cache.builder_parcel.class);
+    DELETE_GLOBAL_REF(handle_cache.iter_parcel.class);
+    DELETE_GLOBAL_REF(handle_cache.view_tree_observer.class);
+    DELETE_GLOBAL_REF(handle_cache.time_picker.class);
+    DELETE_GLOBAL_REF(handle_cache.date_picker.class);
+    
+    #undef DELETE_GLOBAL_REF
+    
+    // Clear the entire struct
+    memset(&handle_cache, 0, sizeof(handle_cache));
 }

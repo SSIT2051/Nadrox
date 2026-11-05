@@ -41,4 +41,13 @@ size_t dwarf_emit_eh_frame(struct ehabi_entry *entries, size_t entry_count,
                             uint8_t *out_buf, size_t out_buf_size,
                             uint64_t text_base);
 
+
+
+/* CFI translation skeleton: ARM EHABI exidx/unwind -> x86_64 DWARF .eh_frame. */
+size_t atl_dwarf_translate_arm_ehabi_to_x86_cfi(const uint8_t *arm_exidx,
+                                                size_t exidx_count,
+                                                uint64_t text_base,
+                                                uint8_t *out_buf,
+                                                size_t out_buf_size);
+
 #endif /* DWARF_EMIT_H */

@@ -1,6 +1,7 @@
 #include "atl_arm_translate.h"
 #include "mir.h"
 #include "arm_decode.h"
+#include "jni/thunk_gen.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -435,9 +436,7 @@ uint32_t atl_arm_syscall_arm_to_host(uint32_t arm_syscall)
 
 void *atl_arm_jni_get_trampoline(const char *method_signature)
 {
-    (void)method_signature;
-    /* TODO: Generate or look up JNI trampoline */
-    return NULL;
+    return atl_jni_get_trampoline(method_signature);
 }
 
 

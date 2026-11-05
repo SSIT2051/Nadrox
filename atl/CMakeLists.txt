@@ -6,6 +6,14 @@ set(ATL_VERSION "0.1.0")
 set(ATL_SOVERSION "0")
 
 # =============================================================================
+# box86/box64 removed; ARM translation handled by atl_translation
+# =============================================================================
+set(BOX86_FOUND FALSE)
+set(BOX64_FOUND FALSE)
+set(BOX86_LIBRARIES "")
+set(BOX64_LIBRARIES "")
+
+# =============================================================================
 # Dependencies (provided by parent scope)
 # =============================================================================
 # These should be available from the root CMakeLists.txt:
@@ -42,6 +50,8 @@ pkg_check_modules(SWSCALE REQUIRED libswscale)
 pkg_check_modules(WEBKITGTK REQUIRED webkitgtk-6.0)
 pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 
+pkg_check_modules(LIBXML2 REQUIRED libxml-2.0)
+
 find_package(OpenGL REQUIRED)
 # find_package(EGL REQUIRED)  # No CMake config, use pkg-config
 pkg_check_modules(EGL REQUIRED egl)
@@ -63,6 +73,9 @@ find_program(GLIB_COMPILE_RESOURCES glib-compile-resources REQUIRED)
 find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
 set(PROTOCOL_DIR ${CMAKE_SOURCE_DIR}/protocol)
+
+# Ensure protocol output directory exists
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/protocol)
 
 # input-method-unstable-v2
 add_custom_command(
@@ -295,6 +308,7 @@ set(JNI_SOURCES
     ${CMAKE_SOURCE_DIR}/src/api-impl-jni/views/gdkarrayimpl.c
     ${CMAKE_SOURCE_DIR}/src/api-impl-jni/views/android_view_inputmethod_InputMethodManager.c
     ${CMAKE_SOURCE_DIR}/src/api-impl-jni/widgets/android_view_SurfaceView.c
+    ${CMAKE_SOURCE_DIR}/src/api-impl-jni/widgets/WrapperWidget.c
     ${CMAKE_SOURCE_DIR}/src/api-impl-jni/widgets/android_webkit_WebView.c
     ${CMAKE_SOURCE_DIR}/src/api-impl-jni/widgets/android_widget_Button.c
     ${CMAKE_SOURCE_DIR}/src/api-impl-jni/widgets/android_widget_CheckBox.c
@@ -366,7 +380,7 @@ endif()
 target_link_libraries(libtranslation_layer_main PUBLIC
     libandroid
     ${GTK4_LIBRARIES}
-    ${GL_LIBRARIES}
+    OpenGL::GL
     ${EGL_LIBRARIES}
     ${WAYLAND_CLIENT_LIBRARIES}
     ${JNI_LIBRARIES}
@@ -377,9 +391,15 @@ target_link_libraries(libtranslation_layer_main PUBLIC
     ${GUDEV_LIBRARIES}
     ${SWSCALE_LIBRARIES}
     ${WEBKITGTK_LIBRARIES}
+    art_libandroidfw.so
+    art_libutils.so
+    art_liblog.so
+    art_libbase.so
+    art_libcutils.so
     ${DL_LIBRARY}
     bionic::dl_bio
     bionic::c_bio
+    atl::translation
     Threads::Threads
     ${ASOUND_LIBRARY}
 )
@@ -396,9 +416,9 @@ set_target_properties(libtranslation_layer_main PROPERTIES
 )
 
 # =============================================================================
-# Main executable
+# Main executable (the real binary, installed as .bin)
 # =============================================================================
-add_executable(android-translation-layer
+add_executable(android-translation-layer.bin
     ${CMAKE_SOURCE_DIR}/src/main-executable/main.c
     ${CMAKE_SOURCE_DIR}/src/main-executable/actions.c
     ${CMAKE_SOURCE_DIR}/src/main-executable/back_button.c
@@ -407,37 +427,92 @@ add_executable(android-translation-layer
     ${CMAKE_CURRENT_BINARY_DIR}/atl.gresource.c
 )
 
-target_include_directories(android-translation-layer PRIVATE
+target_include_directories(android-translation-layer.bin PRIVATE
     ${CMAKE_SOURCE_DIR}/src/main-executable
     ${CMAKE_CURRENT_BINARY_DIR}
     ${GTK4_INCLUDE_DIRS}
     ${JNI_INCLUDE_DIRS}
     ${LIBPORTAL_INCLUDE_DIRS}
     ${FONTCONFIG_INCLUDE_DIRS}
+    ${LIBXML2_INCLUDE_DIRS}
 )
 
-target_compile_definitions(android-translation-layer PRIVATE
+target_compile_definitions(android-translation-layer.bin PRIVATE
     -DINSTALL_DATADIR=\"${CMAKE_INSTALL_DATADIR}\"
 )
 
-target_link_libraries(android-translation-layer PRIVATE
+target_link_libraries(android-translation-layer.bin PRIVATE
     ${GTK4_LIBRARIES}
     ${JNI_LIBRARIES}
     libtranslation_layer_main
     ${DL_LIBRARY}
     bionic::dl_bio
     bionic::c_bio
+    atl::translation
     ${LIBPORTAL_LIBRARIES}
     ${FONTCONFIG_LIBRARIES}
+    ${LIBXML2_LIBRARIES}
+    OpenGL::GL
+    ${EGL_LIBRARIES}
+    ${WAYLAND_CLIENT_LIBRARIES}
+)
+
+target_link_options(android-translation-layer.bin PRIVATE
+    -rdynamic
+    -Wl,-rpath,\$ORIGIN/../lib/art:\$ORIGIN/../lib/java/dex/android_translation_layer/natives:\$ORIGIN/../lib
+)
+
+set_target_properties(android-translation-layer.bin PROPERTIES
+    INSTALL_RPATH "\$ORIGIN/../lib/art:\$ORIGIN/../lib/java/dex/android_translation_layer/natives:\$ORIGIN/../lib"
+    OUTPUT_NAME "android-translation-layer.bin"
+)
+
+# =============================================================================
+# Launcher executable (the installed binary that sets up env and execs .bin)
+# =============================================================================
+add_executable(android-translation-layer
+    ${CMAKE_SOURCE_DIR}/src/main-executable/launcher.c
+)
+
+target_compile_definitions(android-translation-layer PRIVATE
+    -DINSTALL_PREFIX=\"${CMAKE_INSTALL_PREFIX}\"
+    -DINSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\"
 )
 
 target_link_options(android-translation-layer PRIVATE
-    -rdynamic
-    -Wl,-rpath,\$ORIGIN/../lib/art:\$ORIGIN/../lib/java/dex/android_translation_layer/natives
+    -Wl,-rpath,\$ORIGIN/../lib/art:\$ORIGIN/../lib/java/dex/android_translation_layer/natives:\$ORIGIN/../lib
 )
 
 set_target_properties(android-translation-layer PROPERTIES
-    INSTALL_RPATH "\$ORIGIN/../lib/art:\$ORIGIN/../lib/java/dex/android_translation_layer/natives"
+    INSTALL_RPATH "\$ORIGIN/../lib/art:\$ORIGIN/../lib/java/dex/android_translation_layer/natives:\$ORIGIN/../lib"
+)
+
+# =============================================================================
+# Add RPATH to libtranslation_layer_main as well
+# =============================================================================
+target_link_options(libtranslation_layer_main PRIVATE
+    -Wl,-rpath,\$ORIGIN/:\$ORIGIN/../lib/art:\$ORIGIN/../lib
+)
+
+set_target_properties(libtranslation_layer_main PROPERTIES
+    SOVERSION ${ATL_SOVERSION}
+    VERSION ${ATL_VERSION}
+    POSITION_INDEPENDENT_CODE TRUE
+    INSTALL_RPATH "\$ORIGIN/:\$ORIGIN/../lib/art:\$ORIGIN/../lib/java/dex/android_translation_layer/natives:\$ORIGIN/../lib"
+)
+
+# =============================================================================
+# Add RPATH to libandroid as well
+# =============================================================================
+target_link_options(libandroid PRIVATE
+    -Wl,-rpath,\$ORIGIN/:\$ORIGIN/../lib/art:\$ORIGIN/../lib
+)
+
+set_target_properties(libandroid PROPERTIES
+    SOVERSION ${ATL_SOVERSION}
+    VERSION ${ATL_VERSION}
+    POSITION_INDEPENDENT_CODE TRUE
+    INSTALL_RPATH "\$ORIGIN/:\$ORIGIN/../lib/art:\$ORIGIN/../lib"
 )
 
 # =============================================================================
@@ -510,8 +585,13 @@ add_custom_command(
 # =============================================================================
 # Install rules
 # =============================================================================
-install(TARGETS libandroid libtranslation_layer_main android-translation-layer
+install(TARGETS libandroid libtranslation_layer_main android-translation-layer.bin
     LIBRARY DESTINATION lib/java/dex/android_translation_layer/natives
+    RUNTIME DESTINATION bin
+)
+
+# Install the launcher as the main binary
+install(TARGETS android-translation-layer
     RUNTIME DESTINATION bin
 )
 

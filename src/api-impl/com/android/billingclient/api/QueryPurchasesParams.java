@@ -1,17 +1,24 @@
 package com.android.billingclient.api;
 
 public class QueryPurchasesParams {
-    public static Builder newBuilder() {
-        return new Builder();
+    private String type;
+
+    private QueryPurchasesParams(Builder builder) {
+        this.type = builder.type;
     }
 
     public static class Builder {
-        public Builder setProductType(String productType) {
+        private String type;
+
+        public Builder setProductType(String type) {
+            this.type = type;
             return this;
         }
 
         public QueryPurchasesParams build() {
-            return new QueryPurchasesParams();
+            return new QueryPurchasesParams(this);
         }
     }
+
+    public String getProductType() { return type; }
 }

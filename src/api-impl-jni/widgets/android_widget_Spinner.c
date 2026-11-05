@@ -9,6 +9,9 @@
 #include "../generated_headers/android_view_View.h"
 #include "../generated_headers/android_widget_Spinner.h"
 
+JNIEXPORT void JNICALL Java_android_view_View_native_1setBackgroundDrawable(JNIEnv *env, jobject this, jlong widget_ptr, jlong paintable_ptr);
+JNIEXPORT void JNICALL Java_android_view_View_native_1setBackgroundColor(JNIEnv *env, jobject this, jlong widget_ptr, jint color);
+
 static void range_list_model_init(RangeListModel *list_model) {}
 static void range_list_model_class_init(RangeListModelClass *class) {}
 

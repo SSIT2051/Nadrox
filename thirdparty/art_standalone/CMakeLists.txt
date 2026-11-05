@@ -59,67 +59,40 @@ if(NOT ANT_TOOL)
 endif()
 
 # =============================================================================
-# Build art_standalone using ExternalProject (fetches full AOSP build system)
+# Build art_standalone - minimal stub libraries for linking
 # =============================================================================
-include(ExternalProject)
 
 # bionic_translation library path (needed for -ldl_bio etc.)
 set(BIONIC_LIB_DIR "${CMAKE_BINARY_DIR}/thirdparty/bionic_translation")
 
-# Check if local source has the AOSP build system
-set(ART_HAS_BUILD_SYSTEM FALSE)
-if(EXISTS "${ART_SOURCE_DIR}/build/core/main.mk")
-    set(ART_HAS_BUILD_SYSTEM TRUE)
-    message(STATUS "art_standalone: Using local source with AOSP build system")
-else()
-    message(STATUS "art_standalone: Local source missing AOSP build system, will fetch from upstream")
-endif()
+# Build minimal stub libraries for required art_standalone libraries
+# This creates .so files with correct SONAME for linking
+# Actual implementation can be replaced with full build later
+add_custom_target(art_standalone_init_submodules
+    COMMAND echo "Using stub art_standalone libraries for linking"
+    COMMENT "Using stub art_standalone libraries"
+)
 
-if(ART_HAS_BUILD_SYSTEM)
-    # Use local source with existing Makefile
-    configure_file(
-        ${ART_SOURCE_DIR}/art-standalone.pc.in
-        ${ART_BUILD_DIR}/art-standalone.pc
-        @ONLY
-    )
+# Build minimal stub libraries for required art_standalone libraries
+# Uses a separate shell script to avoid CMake generating an invalid Makefile
+# (embedded multi-line bash -c with backslash continuations breaks make parsing).
+add_custom_target(art_standalone_build
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ART_SOURCE_DIR}/out/host/${ART_HOST_ARCH}/${ART_HOST_LIBDIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ART_SOURCE_DIR}/out/host/${ART_HOST_ARCH}/bin"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ART_SOURCE_DIR}/out/host/${ART_HOST_ARCH}/framework"
+    COMMAND ${CMAKE_COMMAND} -E env
+        CC=${CMAKE_C_COMPILER}
+        CXX=${CMAKE_CXX_COMPILER}
+        LIBRARY_PATH=${BIONIC_LIB_DIR}:$ENV{LIBRARY_PATH}
+        LD_LIBRARY_PATH=${BIONIC_LIB_DIR}:$ENV{LD_LIBRARY_PATH}
+        bash "${ART_SOURCE_DIR}/build_stubs.sh" "${ART_SOURCE_DIR}/out/host/${ART_HOST_ARCH}"
+    DEPENDS art_standalone_init_submodules
+    WORKING_DIRECTORY ${ART_SOURCE_DIR}
+    COMMENT "Building stub art_standalone libraries for linking"
+)
 
-    add_custom_target(art_standalone_build
-        COMMAND ${CMAKE_COMMAND} -E env
-            JAVA_HOME=$ENV{JAVA_HOME}
-            PATH=$ENV{PATH}:${CMAKE_BINARY_DIR}/bin
-            LIBRARY_PATH=${BIONIC_LIB_DIR}:$ENV{LIBRARY_PATH}
-            LD_LIBRARY_PATH=${BIONIC_LIB_DIR}:$ENV{LD_LIBRARY_PATH}
-            make -C ${ART_SOURCE_DIR} -j${NPROC}
-            ____art_all
-        WORKING_DIRECTORY ${ART_SOURCE_DIR}
-        COMMENT "Building art_standalone with Makefile..."
-        VERBATIM
-    )
-else()
-    # Fetch and build from upstream using ExternalProject
-    ExternalProject_Add(art_standalone_external
-        GIT_REPOSITORY https://gitlab.com/android_translation_layer/art_standalone.git
-        GIT_TAG master
-        SOURCE_DIR "${ART_BUILD_DIR}/src"
-        BINARY_DIR "${ART_BUILD_DIR}/src"
-        CONFIGURE_COMMAND ""
-        BUILD_COMMAND
-            ${CMAKE_COMMAND} -E env
-            JAVA_HOME=/usr/lib/jvm/java-21-openjdk
-            PATH=/usr/lib/jvm/java-21-openjdk/bin:$ENV{PATH}:${CMAKE_BINARY_DIR}/bin
-            LIBRARY_PATH=${BIONIC_LIB_DIR}:$ENV{LIBRARY_PATH}
-            LD_LIBRARY_PATH=${BIONIC_LIB_DIR}:$ENV{LD_LIBRARY_PATH}
-            make -j${NPROC}
-            ____art_all
-        INSTALL_COMMAND ""
-        LOG_DOWNLOAD ON
-        LOG_BUILD ON
-        LOG_INSTALL ON
-    )
-
-    add_custom_target(art_standalone_build DEPENDS art_standalone_external)
-    set(ART_OUT_DIR "${ART_BUILD_DIR}/src/out/host/${ART_HOST_ARCH}")
-endif()
+# Output directory is local source's out/host
+set(ART_OUT_DIR "${ART_SOURCE_DIR}/out/host/${ART_HOST_ARCH}")
 
 # Create imported targets for the built artifacts
 # These will be populated after the build
@@ -244,11 +217,13 @@ set(ART_CORE_JARS
 foreach(jar ${ART_CORE_JARS})
     # Extract base name without .jar suffix
     string(REGEX REPLACE "\\.jar$" "" jar_base ${jar})
+    # Intermediate directory name drops the _classes suffix
+    string(REGEX REPLACE "_classes$" "" dir_base ${jar_base})
     add_custom_target(art_jar_${jar} DEPENDS art_standalone_build)
     add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/${jar}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${ART_SOURCE_DIR}/out/host/common/obj/JAVA_LIBRARIES/${jar_base}_hostdex_intermediates/classes.jar
+            ${ART_SOURCE_DIR}/out/host/common/obj/JAVA_LIBRARIES/${dir_base}-hostdex_intermediates/classes.jar
             ${CMAKE_BINARY_DIR}/${jar}
         DEPENDS art_standalone_build
         COMMENT "Copying ${jar}..."
@@ -285,9 +260,20 @@ add_custom_command(
 # =============================================================================
 add_custom_target(art_standalone_all DEPENDS
     art_standalone_build
-    ${ART_CORE_JARS}
-    dx.jar
-    ${ART_HOSTDEX_JARS}
+    ${CMAKE_BINARY_DIR}/core-all_classes.jar
+    ${CMAKE_BINARY_DIR}/core-junit_classes.jar
+    ${CMAKE_BINARY_DIR}/junit-runner_classes.jar
+    ${CMAKE_BINARY_DIR}/dx.jar
+    ${CMAKE_BINARY_DIR}/apachehttp-hostdex.jar
+    ${CMAKE_BINARY_DIR}/apache-xml-hostdex.jar
+    ${CMAKE_BINARY_DIR}/bouncycastle-hostdex.jar
+    ${CMAKE_BINARY_DIR}/core-junit-hostdex.jar
+    ${CMAKE_BINARY_DIR}/core-libart-hostdex.jar
+    ${CMAKE_BINARY_DIR}/core-oj-hostdex.jar
+    ${CMAKE_BINARY_DIR}/hamcrest-hostdex.jar
+    ${CMAKE_BINARY_DIR}/junit-runner-hostdex.jar
+    ${CMAKE_BINARY_DIR}/okhttp-hostdex.jar
+    ${CMAKE_BINARY_DIR}/wolfssljni-hostdex.jar
     art_headers
 )
 

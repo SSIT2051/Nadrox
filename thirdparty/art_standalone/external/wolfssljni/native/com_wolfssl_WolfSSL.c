@@ -21,7 +21,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <wolfssl/options.h>
+#include "options.h"
 #include <wolfssl/ssl.h>
 #include <wolfssl/error-ssl.h>
 #include <wolfssl/wolfcrypt/logging.h>

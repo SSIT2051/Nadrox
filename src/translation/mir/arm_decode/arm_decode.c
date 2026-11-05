@@ -374,8 +374,8 @@ static const arm_decode_entry_t a32_decode_table[] = {
     {0x0C000000, 0x04000000, decode_load_store},
     /* op[27:26] == 10, bit[25]==0: load/store multiple (LDM/STM) */
     {0x0E000000, 0x08000000, decode_load_store_multiple},
-    /* op[27:24] == 1010: branch (B / BL) */
-    {0x0F000000, 0x0A000000, decode_branch},
+    /* op[27:25] == 101: branch (B / BL) */
+    {0x0E000000, 0x0A000000, decode_branch},
     /* op[27:24] == 1110: coprocessor */
     {0x0F000000, 0x0E000000, decode_coprocessor},
     /* op[27:24] == 1111: SVC / undefined */
@@ -632,11 +632,6 @@ bool atl_arm_decode_a32(uint32_t inst, atl_arm_decoded_inst_t *out)
 
     memset(out, 0, sizeof(*out));
     out->cond = ARM_COND(inst);
-
-    /* Unconditional (cond == 1111) special handling */
-    if (ARM_COND(inst) == ARM_COND_NV) {
-        out->cond = ARM_COND_AL;
-    }
 
     /* Dispatch via decode table (opcode masks) */
     for (size_t i = 0; i < A32_TABLE_SIZE; i++) {

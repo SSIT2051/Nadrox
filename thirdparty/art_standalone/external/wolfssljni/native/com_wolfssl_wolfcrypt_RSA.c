@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <wolfssl/options.h>
+#include "options.h"
 #include <wolfssl/wolfcrypt/rsa.h>
 #include "com_wolfssl_wolfcrypt_RSA.h"
 #include <stdio.h>
